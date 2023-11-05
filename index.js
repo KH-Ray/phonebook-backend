@@ -91,10 +91,6 @@ app.post("/api/persons", (req, res) => {
   persons = persons.concat(person);
 
   res.json(person);
-
-  morgan.token("body", (req) => {
-    return JSON.stringify(req.body);
-  });
 });
 
 const PORT = 3001;
