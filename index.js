@@ -1,19 +1,44 @@
+require("dotenv").config();
 const morgan = require("morgan");
 const express = require("express");
 const app = express();
 const cors = require("cors");
+const mongoose = require("mongoose");
+const Phonebook = require("./models/note");
 
 app.use(cors());
-app.use(express.json());
 app.use(express.static("dist"));
+app.use(express.json());
 
 morgan.token("body", (req) => {
   return JSON.stringify(req.body);
 });
-
 app.use(
   morgan(":method :url :status :res[content-length] - :response-time ms :body")
 );
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message);
+
+  if (error.name === "CastError") {
+    return response.status(400).send({ error: "malformatted id" });
+  }
+
+  next(error);
+};
+
+const url = process.env.MONGODB_URI;
+
+console.log("connecting to", url);
+
+mongoose
+  .connect(url)
+  .then((result) => {
+    console.log("connected to MongoDB");
+  })
+  .catch((error) => {
+    console.log("error connecting to MongoDB:", error.message);
+  });
 
 let persons = [
   {
@@ -39,32 +64,54 @@ let persons = [
 ];
 
 app.get("/api/persons", (req, res) => {
-  res.json(persons);
+  Phonebook.find({}).then((poepleList) => {
+    res.json(poepleList);
+  });
 });
 
 app.get("/info", (req, res) => {
-  res.send(`
-  <p>Phonebook has info for ${persons.length} people</p>
-  <p>${Date()}</p>
-  `);
+  Phonebook.find({}).then((poepleList) => {
+    res.send(`
+    <p>Phonebook has info for ${poepleList.length} people</p>
+    <p>${Date()}</p>
+    `);
+  });
 });
 
-app.get("/api/persons/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const person = persons.find((person) => person.id === id);
-
-  if (person) {
-    res.json(person);
-  } else {
-    res.status(404).end();
-  }
+app.get("/api/persons/:id", (req, res, next) => {
+  const id = req.params.id;
+  Phonebook.findById(id)
+    .then((note) => {
+      if (note) {
+        res.json(note);
+      } else {
+        res.status(404).end();
+      }
+    })
+    .catch((error) => next(error));
 });
 
-app.delete("/api/persons/:id", (req, res) => {
-  const id = Number(req.params.id);
-  persons = persons.filter((person) => person.id !== id);
+app.delete("/api/persons/:id", (req, res, next) => {
+  const id = req.params.id;
+  Phonebook.findByIdAndDelete(id)
+    .then((result) => res.status(204).end())
+    .catch((error) => next(error));
+});
 
-  res.status(204).end();
+app.put("/api/persons/:id", (req, res, next) => {
+  const id = req.params.id;
+  const body = req.body;
+
+  const person = {
+    name: body.name,
+    number: body.number,
+  };
+
+  Phonebook.findByIdAndUpdate(id, person, { new: true })
+    .then((updatedNote) => {
+      res.json(updatedNote);
+    })
+    .catch((error) => next(error));
 });
 
 app.post("/api/persons", (req, res) => {
@@ -85,18 +132,20 @@ app.post("/api/persons", (req, res) => {
     });
   }
 
-  const person = {
+  const person = new Phonebook({
     id: randomId,
     name: body.name,
     number: body.number,
-  };
+  });
 
-  persons = persons.concat(person);
-
-  res.json(person);
+  person.save().then((savedPerson) => {
+    res.json(savedPerson);
+  });
 });
 
-const PORT = process.env.PORT || 3001;
+app.use(errorHandler);
+
+const PORT = process.env.PORT;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
