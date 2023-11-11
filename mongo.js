@@ -1,5 +1,3 @@
-// PASSWORD: y5YSicIOzDWvrMWj -> DON'T FORGET TO DELETE AFTER FINISH
-
 const mongoose = require("mongoose");
 
 const argument = process.argv;
